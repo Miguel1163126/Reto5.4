@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Reto 5.3 - Arquitectura MQTT</title>
     
-    <!-- CDN Oficial de MQTT libre de errores -->
+    <!-- CDN de la librería oficial MQTT -->
     <script src="https://unpkg.com"></script>
 
     <style>
@@ -23,7 +23,8 @@
 <body>
 
     <h1>Simulador Práctico MQTT (Reto 5.3)</h1>
-    <div id="conexion" class="status" style="color: #ffb74d;">Conectando...</div>
+    <!-- Agregamos un indicador visual claro del error si ocurre alguno -->
+    <div id="conexion" class="status" style="color: #ffb74d;">🔄 Inicializando conexión...</div>
 
     <div class="grid">
         <!-- IZQUIERDA -->
@@ -32,7 +33,7 @@
             <button onclick="comprar()">1. Presiona en comprar</button>
             <button onclick="enviarPago()">2. Información de compra</button>
             <p><b>Confirmación:</b></p>
-            <pre id="cli-confirmacion">Esperando...</pre>
+            <pre id="cli-confirmacion">Esperando transacción...</pre>
         </div>
 
         <!-- CENTRO -->
@@ -45,7 +46,7 @@
         <div class="box">
             <h3>Eventos Aplicación</h3>
             <p><b>Comunicación:</b></p>
-            <pre id="app-comunicacion">Esperando...</pre>
+            <pre id="app-comunicacion">Esperando evento...</pre>
             <p><b>Sistema de Pagos:</b></p>
             <pre id="app-pagos">Esperando...</pre>
             <p><b>Seguimiento (Logs):</b></p>
@@ -54,13 +55,15 @@
     </div>
 
     <script>
-        // Conexión directa y ultra-estable a HiveMQ
-        var URL_BROKER = 'wss://://hivemq.com';
-        var ID_CLIENTE = 'user_' + Math.random().toString(16).substring(2, 8);
+        // Cambiamos a la conexión web nativa para evitar bloqueos de cortafuegos en navegadores
+        var URL_BROKER = 'ws://://hivemq.com'; 
+        var ID_CLIENTE = 'user_web_' + Math.random().toString(16).substring(2, 8);
         
+        console.log("Intentando conectar a " + URL_BROKER);
         var client = mqtt.connect(URL_BROKER, { clientId: ID_CLIENTE });
 
         client.on('connect', function() {
+            console.log("¡Conectado!");
             var conBox = document.getElementById('conexion');
             conBox.innerText = '🟢 Conectado con éxito';
             conBox.style.color = '#66bb6a';
@@ -70,12 +73,32 @@
             client.subscribe('mi_tienda/pedidos/resultado');
         });
 
+        // Alerta visual inmediata si el navegador bloquea la red
+        client.on('error', function(err) {
+            document.getElementById('conexion').innerText = '🔴 Conexión bloqueada por el navegador';
+            document.getElementById('conexion').style.color = '#ef5350';
+            console.error("Error MQTT:", err);
+        });
+
+        client.on('offline', function() {
+            document.getElementById('conexion').innerText = '⏳ Servidor fuera de línea, reintentando...';
+            document.getElementById('conexion').style.color = '#ffb74d';
+        });
+
         function comprar() {
-            var mensaje = JSON.stringify({ evento: "Click en comprar" });
+            if (!client.connected) {
+                alert("No puedes comprar: El navegador mantiene la conexión bloqueada.");
+                return;
+            }
+            var mensaje = JSON.stringify({ evento: "Click en comprar", tiempo: Date.now() });
             client.publish('mi_tienda/pedidos/nuevo', mensaje);
         }
 
         function enviarPago() {
+            if (!client.connected) {
+                alert("No puedes enviar datos: Sin conexión activa.");
+                return;
+            }
             var mensaje = JSON.stringify({ pedidoId: "RETO-5-3", total: 899 });
             client.publish('mi_tienda/pedidos/datos_pago', mensaje);
         }
@@ -84,25 +107,24 @@
             var texto = message.toString();
             var hora = new Date().toLocaleTimeString();
 
-            // Logs globales
             var logBox = document.getElementById('app-seguimiento');
             if(logBox.innerText.includes("Vacío")) logBox.innerText = "";
             logBox.innerText += '[' + hora + '] ' + topic + ': ' + texto + '\n';
 
             if (topic === 'mi_tienda/pedidos/nuevo') {
-                document.getElementById('app-comunicacion').innerText = '[' + hora + '] Orden recibida.';
+                document.getElementById('app-comunicacion').innerText = '[' + hora + '] 📩 Orden detectada en comunicación.';
             }
 
             if (topic === 'mi_tienda/pedidos/datos_pago') {
-                document.getElementById('app-pagos').innerText = '[' + hora + '] Procesando cobro...';
+                document.getElementById('app-pagos').innerText = '[' + hora + '] 💳 Pasarela procesando cobro...';
                 setTimeout(function() {
-                    var respuesta = JSON.stringify({ pedidoId: "RETO-5-3", estado: "APROBADO" });
+                    var respuesta = JSON.stringify({ pedidoId: "RETO-5-3", estado: "APROBADO_OK" });
                     client.publish('mi_tienda/pedidos/resultado', respuesta);
-                }, 1000);
+                }, 1200);
             }
 
             if (topic === 'mi_tienda/pedidos/resultado') {
-                document.getElementById('cli-confirmacion').innerText = '🎉 ¡Éxito!\n' + texto;
+                document.getElementById('cli-confirmacion').innerText = '🎉 ¡Confirmación Devolución!\n' + texto;
             }
         });
     </script>
